@@ -25,7 +25,8 @@ model Trader {
   xAccountLink   String
   xHandle        String
   xProfilePic    String?
-  historyData    String   @default("[]")
+  
+  historyData    String   @default("[]") // Personal Volume History
   
   // MANUAL INPUT (Used for Tier)
   expectedVolume Float 
@@ -34,9 +35,33 @@ model Trader {
   // REAL DATA (From API)
   realVolume     Float @default(0) 
 
+  // REFERRAL DATA
+  referralVolume30d Float @default(0)
+  referralHistory   String @default("[]")
+
+  // RELATIONS
+  deal           Deal?    // One-to-One Relation
+
   tags           String   @default("")
-  notes          String?  
+  notes          String?
   addedById      String
   addedBy        User     @relation(fields: [addedById], references: [id])
   lastActive     DateTime @default(now()) 
+}
+
+// NEW DEAL MODEL
+model Deal {
+  id              String  @id @default(uuid())
+  traderId        String  @unique
+  trader          Trader  @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  retainerAmount  Float?
+  cashbackPercent Float?
+
+  // Commission Structure
+  commTier1       Float?
+  commTier2       Float?
+  commTier3       Float?
+  commTier4       Float?
+  commTier5       Float?
 }
