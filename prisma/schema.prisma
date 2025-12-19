@@ -1,0 +1,42 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id         String   @id @default(uuid())
+  username   String   @unique 
+  profilePic String   
+  traders    Trader[]
+}
+
+model Trader {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+  name           String
+  uxAddress      String
+  referralCode   String?
+  region         String
+  xAccountLink   String
+  xHandle        String
+  xProfilePic    String?
+  historyData    String   @default("[]")
+  
+  // MANUAL INPUT (Used for Tier)
+  expectedVolume Float 
+  tier           String
+
+  // REAL DATA (From API)
+  realVolume     Float @default(0) 
+
+  tags           String   @default("")
+  notes          String?  
+  addedById      String
+  addedBy        User     @relation(fields: [addedById], references: [id])
+  lastActive     DateTime @default(now()) 
+}
