@@ -29,9 +29,34 @@ export async function addTrader(formData: FormData) {
   if (!userId) return
 
   const name = formData.get('name') as string
-  const uxAddress = formData.get('uxAddress') as string
+  let uxAddress = formData.get('uxAddress') as string
   let xLink = formData.get('xAccountLink') as string
+  const tier = formData.get('tier') as string || 'Tier 3'
   
+  // --- SOLANA ADDRESS CHECK ---
+  if (uxAddress && !uxAddress.startsWith('0x')) {
+    try {
+      const response = await fetch(
+        `https://universal-app-api-staging.particle.network/user_activity?solanaAddress=${uxAddress}`
+      )
+      
+      if (!response.ok) {
+        throw new Error("Failed to resolve Solana address")
+      }
+
+      const data = await response.json()
+      
+      if (data?.basicInfo?.evmAddress) {
+        uxAddress = data.basicInfo.evmAddress
+      } else {
+        throw new Error("Could not find associated EVM address for this Solana wallet")
+      }
+    } catch (error) {
+      console.error("Error resolving Solana address:", error)
+      throw error 
+    }
+  }
+
   // 1. Handle X Handle Parsing
   let handle = ""
   try {
@@ -50,13 +75,12 @@ export async function addTrader(formData: FormData) {
   // 2. FETCH REAL DATA FROM API
   const data = await UniversalXService.getTraderData(uxAddress)
 
-  // 3. GET MANUAL ESTIMATE (Slider Input)
-  const estimatedVolume = parseFloat(formData.get('volume') as string)
-  
-  // 4. CALCULATE TIER BASED ON ESTIMATE (Not Real Data)
-  let tier = 'Tier 3'
-  if (estimatedVolume >= 100000 && estimatedVolume < 1000000) tier = 'Tier 2'
-  if (estimatedVolume >= 1000000) tier = 'Tier 1'
+  // 3. MAP TIER TO ESTIMATED VOLUME (Legacy Support)
+  // We map the selected tier to a volume floor value to keep the schema consistent
+  let estimatedVolume = 0
+  if (tier === 'Tier 1') estimatedVolume = 1000000
+  if (tier === 'Tier 2') estimatedVolume = 100000
+  if (tier === 'Tier 3') estimatedVolume = 0
 
   await db.trader.create({
     data: {
@@ -69,7 +93,7 @@ export async function addTrader(formData: FormData) {
       xProfilePic: profilePicUrl,
       
       // VOLUME SPLIT
-      expectedVolume: estimatedVolume, // Manual (for Tier)
+      expectedVolume: estimatedVolume, // Mapped from Tier
       realVolume: data.volume30d,      // Real (for Dashboard Stats)
       
       // HISTORY DATA (For Dashboard Aggregation)
