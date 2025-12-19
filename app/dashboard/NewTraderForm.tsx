@@ -1,74 +1,202 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
-import { addTrader } from '../actions'
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { addTrader } from "@/app/actions"
+import { useRouter } from "next/navigation"
 
-export function NewTraderForm() {
-  const [volume, setVolume] = useState(0)
+export default function NewTraderForm() {
+  const router = useRouter()
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
   
-  // Helper to determine Tier based on volume
-  const getTier = (vol: number) => {
-    if (vol < 100000) return { label: 'Tier 3', color: 'text-gray-400' }
-    if (vol < 1000000) return { label: 'Tier 2', color: 'text-blue-400' }
-    return { label: 'Tier 1', color: 'text-yellow-400 font-bold' }
+  // Form State
+  const [name, setName] = useState("")
+  const [address, setAddress] = useState("")
+  const [xLink, setXLink] = useState("")
+  const [tier, setTier] = useState("Tier 3") // Default to Tier 3
+  
+  // Optional fields state
+  const [referralCode, setReferralCode] = useState("")
+  const [region, setRegion] = useState("")
+  const [tags, setTags] = useState("")
+  const [notes, setNotes] = useState("")
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    const formDataObj = new FormData()
+    formDataObj.append("name", name)
+    formDataObj.append("uxAddress", address)
+    formDataObj.append("xAccountLink", xLink)
+    formDataObj.append("tier", tier)
+    
+    // Append optional fields
+    formDataObj.append("referralCode", referralCode)
+    formDataObj.append("region", region)
+    formDataObj.append("tags", tags)
+    formDataObj.append("notes", notes)
+
+    try {
+      // Since addTrader is a Server Action that redirects, 
+      // successful execution will likely redirect before this block finishes.
+      await addTrader(formDataObj)
+      
+      // If we are here, we can reset (though redirect usually happens first)
+      setName("")
+      setAddress("")
+      setXLink("")
+      router.refresh()
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || "An error occurred adding the trader.")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const tier = getTier(volume)
+  const tiers = [
+    {
+      id: "Tier 1",
+      label: "Tier 1",
+      description: "Strong, high-volume",
+      color: "border-emerald-500 bg-emerald-50 text-emerald-900"
+    },
+    {
+      id: "Tier 2",
+      label: "Tier 2",
+      description: "Potentially high volume",
+      color: "border-blue-500 bg-blue-50 text-blue-900"
+    },
+    {
+      id: "Tier 3",
+      label: "Tier 3",
+      description: "Low volume expectations",
+      color: "border-slate-500 bg-slate-50 text-slate-900"
+    }
+  ]
 
   return (
-    <form action={async (formData) => {
-        await addTrader(formData);
-        setVolume(0); // Reset UI
-        // In a real app, you'd reset the other fields via a ref or state
-    }} className="space-y-4">
-      
-      <input name="name" required placeholder="Trader Name" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-blue-500 outline-none" />
-      
-      <div className="grid grid-cols-2 gap-2">
-        <input name="uxAddress" required placeholder="UniversalX Address" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white outline-none" />
-        <input name="referralCode" required placeholder="Referral Code" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white outline-none" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <select name="region" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-gray-300 outline-none">
-          <option value="US">United States</option>
-          <option value="Europe">Europe</option>
-          <option value="China">China</option>
-          <option value="Vietnam">Vietnam</option>
-          <option value="Korea">Korea</option>
-          <option value="N/A">N/A</option>
-        </select>
-        <input name="xAccountLink" placeholder="X Link (twitter.com/...)" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white outline-none" />
-      </div>
-
-      <input name="xProfilePic" placeholder="Profile Pic URL (Optional)" className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white outline-none" />
-
-      {/* THE SLIDER */}
-      <div className="pt-4 border-t border-gray-800">
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-xs uppercase text-gray-500 font-bold tracking-wider">Est. Monthly Volume</label>
-          <span className={`text-sm ${tier.color}`}>{tier.label}</span>
-        </div>
+    <div className="w-full max-w-2xl mx-auto p-6 border rounded-xl bg-white shadow-sm">
+      <h2 className="text-2xl font-bold mb-6 text-slate-800">Add New Trader</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
         
-        <input 
-          type="range" 
-          name="volume"
-          min="0" 
-          max="1500000" 
-          step="10000" 
-          value={volume}
-          onChange={(e) => setVolume(Number(e.target.value))}
-          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-        />
-        
-        <div className="text-right text-white font-mono mt-1">
-          ${volume.toLocaleString()}{volume >= 1500000 ? '+' : ''}
+        {/* Basic Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              placeholder="Trader Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="xLink">X / Twitter Link</Label>
+            <Input
+              id="xLink"
+              placeholder="@username or https://x.com/..."
+              value={xLink}
+              onChange={(e) => setXLink(e.target.value)}
+              required
+            />
+          </div>
         </div>
-      </div>
 
-      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded transition mt-2">
-        + Add Trader
-      </button>
-    </form>
+        <div className="space-y-2">
+          <Label htmlFor="address">Wallet Address</Label>
+          <Input
+            id="address"
+            placeholder="0x... or Solana address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            required
+            className="font-mono"
+          />
+          <p className="text-xs text-slate-500">
+            Solana addresses will be automatically resolved to their associated EVM address.
+          </p>
+        </div>
+
+        {/* Tier Selection */}
+        <div className="space-y-3">
+          <Label>Trader Tier</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {tiers.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => setTier(t.id)}
+                className={`
+                  cursor-pointer p-4 rounded-lg border-2 transition-all duration-200
+                  flex flex-col items-center justify-center text-center gap-1
+                  ${tier === t.id ? t.color : "border-slate-200 hover:border-slate-300 bg-white"}
+                `}
+              >
+                <div className="font-bold text-lg">{t.label}</div>
+                <div className="text-[10px] uppercase tracking-wide opacity-80">{t.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Optional Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="referral">Referral Code (Optional)</Label>
+            <Input
+              id="referral"
+              placeholder="REF123"
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="region">Region (Optional)</Label>
+            <Input
+              id="region"
+              placeholder="e.g. SEA, EU, NA"
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+            <Label htmlFor="tags">Tags (Comma separated)</Label>
+            <Input
+              id="tags"
+              placeholder="whale, kol, friend"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+            />
+        </div>
+
+        <div className="space-y-2">
+            <Label htmlFor="notes">Initial Notes</Label>
+            <Input
+              id="notes"
+              placeholder="Any context..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+        </div>
+
+        {error && (
+          <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-200">
+            {error}
+          </div>
+        )}
+
+        <Button type="submit" className="w-full h-11 text-base" disabled={loading}>
+          {loading ? "Adding Trader..." : "Add Trader"}
+        </Button>
+      </form>
+    </div>
   )
 }
