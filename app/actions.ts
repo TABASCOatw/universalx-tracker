@@ -29,34 +29,9 @@ export async function addTrader(formData: FormData) {
   if (!userId) return
 
   const name = formData.get('name') as string
-  let uxAddress = formData.get('uxAddress') as string
+  const uxAddress = formData.get('uxAddress') as string
   let xLink = formData.get('xAccountLink') as string
-  const tier = formData.get('tier') as string || 'Tier 3'
   
-  // --- SOLANA ADDRESS CHECK ---
-  if (uxAddress && !uxAddress.startsWith('0x')) {
-    try {
-      const response = await fetch(
-        `https://universal-app-api-staging.particle.network/user_activity?solanaAddress=${uxAddress}`
-      )
-      
-      if (!response.ok) {
-        throw new Error("Failed to resolve Solana address")
-      }
-
-      const data = await response.json()
-      
-      if (data?.basicInfo?.evmAddress) {
-        uxAddress = data.basicInfo.evmAddress
-      } else {
-        throw new Error("Could not find associated EVM address for this Solana wallet")
-      }
-    } catch (error) {
-      console.error("Error resolving Solana address:", error)
-      throw error 
-    }
-  }
-
   // 1. Handle X Handle Parsing
   let handle = ""
   try {
@@ -75,12 +50,25 @@ export async function addTrader(formData: FormData) {
   // 2. FETCH REAL DATA FROM API
   const data = await UniversalXService.getTraderData(uxAddress)
 
-  // 3. MAP TIER TO ESTIMATED VOLUME (Legacy Support)
-  // We map the selected tier to a volume floor value to keep the schema consistent
-  let estimatedVolume = 0
-  if (tier === 'Tier 1') estimatedVolume = 1000000
-  if (tier === 'Tier 2') estimatedVolume = 100000
-  if (tier === 'Tier 3') estimatedVolume = 0
+  // 3. GET TIER (Manual Input)
+  const tier = formData.get('tier') as string || 'Tier 3'
+
+  // 4. EXTRACT DEAL DATA
+  const hasDeal = formData.get('hasDeal') === 'on';
+  let dealData = {};
+  if (hasDeal) {
+      dealData = {
+          create: {
+              retainerAmount: formData.get('retainer') ? parseFloat(formData.get('retainer') as string) : null,
+              cashbackPercent: formData.get('cashback') ? parseFloat(formData.get('cashback') as string) : null,
+              commTier1: formData.get('commTier1') ? parseFloat(formData.get('commTier1') as string) : null,
+              commTier2: formData.get('commTier2') ? parseFloat(formData.get('commTier2') as string) : null,
+              commTier3: formData.get('commTier3') ? parseFloat(formData.get('commTier3') as string) : null,
+              commTier4: formData.get('commTier4') ? parseFloat(formData.get('commTier4') as string) : null,
+              commTier5: formData.get('commTier5') ? parseFloat(formData.get('commTier5') as string) : null,
+          }
+      }
+  }
 
   await db.trader.create({
     data: {
@@ -92,23 +80,58 @@ export async function addTrader(formData: FormData) {
       xHandle: `@${handle}`,
       xProfilePic: profilePicUrl,
       
-      // VOLUME SPLIT
-      expectedVolume: estimatedVolume, // Mapped from Tier
-      realVolume: data.volume30d,      // Real (for Dashboard Stats)
+      expectedVolume: 0, // No longer used, set to 0 to satisfy schema
+      realVolume: data.volume30d,      
       
-      // HISTORY DATA (For Dashboard Aggregation)
       historyData: JSON.stringify(data.calendarData),
+      referralVolume30d: data.referralStats.volume30d,
+      referralHistory: JSON.stringify(data.referralStats.history),
 
       lastActive: data.lastActive || new Date(),
       tier: tier, 
       addedById: userId,
       tags: formData.get('tags') as string,
-      notes: (formData.get('notes') as string) || null
+      notes: (formData.get('notes') as string) || null,
+      
+      // CONNECT DEAL
+      deal: hasDeal ? dealData : undefined
     }
   })
 
   revalidatePath('/dashboard')
   redirect('/dashboard')
+}
+
+// --- UPDATE DEAL ---
+export async function updateTraderDeal(formData: FormData) {
+    const traderId = formData.get('traderId') as string;
+    
+    const retainer = formData.get('retainer') ? parseFloat(formData.get('retainer') as string) : null;
+    const cashback = formData.get('cashback') ? parseFloat(formData.get('cashback') as string) : null;
+    
+    // Commission
+    const commTier1 = formData.get('commTier1') ? parseFloat(formData.get('commTier1') as string) : null;
+    const commTier2 = formData.get('commTier2') ? parseFloat(formData.get('commTier2') as string) : null;
+    const commTier3 = formData.get('commTier3') ? parseFloat(formData.get('commTier3') as string) : null;
+    const commTier4 = formData.get('commTier4') ? parseFloat(formData.get('commTier4') as string) : null;
+    const commTier5 = formData.get('commTier5') ? parseFloat(formData.get('commTier5') as string) : null;
+
+    const dataPayload = {
+        retainerAmount: retainer,
+        cashbackPercent: cashback,
+        commTier1, commTier2, commTier3, commTier4, commTier5
+    };
+
+    await db.deal.upsert({
+        where: { traderId: traderId },
+        update: dataPayload,
+        create: {
+            traderId: traderId,
+            ...dataPayload
+        }
+    });
+
+    revalidatePath(`/trader/${traderId}`);
 }
 
 // --- UPDATE NOTES ---
@@ -128,13 +151,14 @@ export async function updateTraderNotes(formData: FormData) {
 export async function refreshTraderData(traderId: string, address: string) {
     const data = await UniversalXService.getTraderData(address);
     
-    // ONLY UPDATE REAL STATS & HISTORY - DO NOT TOUCH TIER OR ESTIMATE
     await db.trader.update({
         where: { id: traderId },
         data: {
             realVolume: data.volume30d,
             lastActive: data.lastActive,
-            historyData: JSON.stringify(data.calendarData)
+            historyData: JSON.stringify(data.calendarData),
+            referralVolume30d: data.referralStats.volume30d,
+            referralHistory: JSON.stringify(data.referralStats.history),
         }
     });
 

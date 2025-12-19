@@ -2,12 +2,10 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Plus, BarChart, Users, X, UserPlus, Loader2 } from 'lucide-react'
+import { Plus, BarChart, Users, X, UserPlus, Loader2, Share2 } from 'lucide-react'
 
-// ... Keep Flag, MiniTag, RealLineChart, RealBarChart EXACTLY as they are ...
-// (I will assume they are here to save space)
-
-// ... HELPER COMPONENTS START ...
+// ... HELPER COMPONENTS (Flag, MiniTag, RealLineChart, RealBarChart) ...
+// (Retaining existing helpers verbatim)
 function Flag({ region }: { region: string }) {
   const codeMap: Record<string, string> = {
     'US': 'us', 'Europe': 'eu', 'China': 'cn', 
@@ -82,7 +80,6 @@ function RealBarChart({ data }: { data: { date: string, val: number }[] }) {
         </div>
     )
 }
-// ... HELPER COMPONENTS END ...
 
 
 export function RosterView({ currentUser, teamMembers, allTraders }: any) {
@@ -91,9 +88,7 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
   const [tagFilter, setTagFilter] = useState('All') 
   const [sortOrder, setSortOrder] = useState('desc') 
   const [showActiveOnly, setShowActiveOnly] = useState(false)
-  const [metricModal, setMetricModal] = useState<'volume' | 'active' | null>(null)
-  
-  // 1. NEW LOADING STATE
+  const [metricModal, setMetricModal] = useState<'volume' | 'active' | 'referral' | null>(null) // Added 'referral'
   const [isLoadingTrader, setIsLoadingTrader] = useState(false)
 
   const allUniqueTags = Array.from(new Set(allTraders.flatMap((t: any) => t.tags ? t.tags.split(',') : []))).filter(Boolean) as string[]
@@ -119,27 +114,34 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
     return true
   })
 
-  const { chartDataVolume, chartDataActive, totalRealVolume, totalActiveNow } = useMemo(() => {
+  // CALCULATE METRICS
+  const { chartDataVolume, chartDataReferral, chartDataActive, totalRealVolume, totalReferralVolume, totalActiveNow } = useMemo(() => {
     const volMap: Record<string, number> = {};
+    const refMap: Record<string, number> = {}; // NEW: Map for referral history
     const activeMap: Record<string, number> = {};
     let grandTotalVol = 0;
+    let grandTotalRef = 0; // NEW: Total Referral
     let activeNowCount = 0;
 
     const today = new Date();
+    // Initialize last 30 days keys
     for(let i=29; i>=0; i--) {
         const d = new Date();
         d.setDate(today.getDate() - i);
         const key = d.toISOString().split('T')[0];
         volMap[key] = 0;
+        refMap[key] = 0;
         activeMap[key] = 0;
     }
 
     filteredTraders.forEach((t: any) => {
         grandTotalVol += t.realVolume;
+        grandTotalRef += (t.referralVolume30d || 0); // Accumulate referral volume
 
         const hoursSinceActive = (new Date().getTime() - new Date(t.lastActive).getTime()) / (1000 * 60 * 60);
         if (hoursSinceActive < 24) activeNowCount++;
 
+        // 1. Process Personal Volume History
         if (t.historyData) {
             try {
                 const history = JSON.parse(t.historyData);
@@ -151,13 +153,27 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
                 });
             } catch (e) { console.error("History parse fail", t.name); }
         }
+
+        // 2. Process Referral Volume History
+        if (t.referralHistory) {
+            try {
+                const history = JSON.parse(t.referralHistory);
+                history.forEach((day: any) => {
+                    if (refMap[day.date] !== undefined) {
+                        refMap[day.date] += (day.val || 0);
+                    }
+                });
+            } catch (e) { console.error("Ref History parse fail", t.name); }
+        }
     });
 
     const dates = Object.keys(volMap).sort();
     return {
         chartDataVolume: dates.map(d => ({ date: d, val: volMap[d] })),
+        chartDataReferral: dates.map(d => ({ date: d, val: refMap[d] })), // New chart data
         chartDataActive: dates.map(d => ({ date: d, val: activeMap[d] })),
         totalRealVolume: grandTotalVol,
+        totalReferralVolume: grandTotalRef,
         totalActiveNow: activeNowCount
     };
   }, [filteredTraders]);
@@ -179,7 +195,6 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
   return (
     <div className="max-w-7xl mx-auto w-full">
       
-      {/* 2. LOADING OVERLAY */}
       {isLoadingTrader && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
             <div className="bg-[#1c1917] border border-[#292524] p-8 max-w-sm w-full shadow-2xl flex flex-col items-center animate-in fade-in zoom-in duration-300">
@@ -193,7 +208,9 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
       )}
 
       {/* METRICS ROW */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        
+        {/* 1. PERSONAL VOLUME */}
         <button 
           onClick={() => setMetricModal('volume')}
           className="group relative bg-[#1c1917] border border-[#292524] p-6 text-left hover:border-amber-700/50 transition-all overflow-hidden"
@@ -202,11 +219,26 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
             <BarChart size={40} className="text-amber-600" />
           </div>
           <div className="text-[#78716c] text-[10px] font-bold uppercase tracking-widest mb-1">Total 30d Volume</div>
-          <div className="text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
+          <div className="text-2xl lg:text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
             ${totalRealVolume.toLocaleString()}
           </div>
         </button>
 
+        {/* 2. NEW: REFERRAL VOLUME */}
+        <button 
+          onClick={() => setMetricModal('referral')}
+          className="group relative bg-[#1c1917] border border-[#292524] p-6 text-left hover:border-amber-700/50 transition-all overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Share2 size={40} className="text-amber-600" />
+          </div>
+          <div className="text-[#78716c] text-[10px] font-bold uppercase tracking-widest mb-1">30d Referral Vol</div>
+          <div className="text-2xl lg:text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
+            ${totalReferralVolume.toLocaleString()}
+          </div>
+        </button>
+
+        {/* 3. ACTIVE TRADERS */}
         <button 
           onClick={() => setMetricModal('active')}
           className="group relative bg-[#1c1917] border border-[#292524] p-6 text-left hover:border-amber-700/50 transition-all overflow-hidden"
@@ -215,17 +247,18 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
             <Users size={40} className="text-amber-600" />
           </div>
           <div className="text-[#78716c] text-[10px] font-bold uppercase tracking-widest mb-1">Active Traders (24h)</div>
-          <div className="text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
+          <div className="text-2xl lg:text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
             {totalActiveNow} <span className="text-sm text-[#57534e]">/ {filteredTraders.length}</span>
           </div>
         </button>
 
+        {/* 4. NEW TRADERS */}
         <div className="group relative bg-[#1c1917] border border-[#292524] p-6 text-left hover:border-amber-700/50 transition-all overflow-hidden cursor-default">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <UserPlus size={40} className="text-amber-600" />
           </div>
           <div className="text-[#78716c] text-[10px] font-bold uppercase tracking-widest mb-1">New Traders (Week)</div>
-          <div className="text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
+          <div className="text-2xl lg:text-3xl font-bold text-[#e7e5e4] font-mono group-hover:text-amber-500 transition-colors">
             +{newTradersThisWeek}
           </div>
         </div>
@@ -299,13 +332,13 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
                      const isActive = hoursSinceActive < 24
                      const tierStyle = getTierStyles(trader.tier)
                      const tags = trader.tags ? trader.tags.split(',').filter(Boolean) : []
+                     const hasReferralVol = trader.referralVolume30d > 0
                      
                      return (
-                      // 3. ADD ONCLICK TO TRIGGER LOADER
                       <Link 
                          href={`/trader/${trader.id}`} 
                          key={trader.id} 
-                         onClick={() => setIsLoadingTrader(true)} // <-- TRIGGER
+                         onClick={() => setIsLoadingTrader(true)} 
                          className={`group block bg-[#1c1917] border transition-all hover:-translate-y-1 hover:bg-[#292524] ${isActive ? 'border-emerald-900/50' : 'border-[#292524] hover:border-[#44403c]'} overflow-hidden shadow-lg`}
                       >
                         <div className="p-3">
@@ -329,9 +362,19 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
                         </div>
                         <div className={`px-3 py-2 border-t flex justify-between items-center ${tierStyle.bg} ${tierStyle.border}`}>
                            <span className={`text-[10px] uppercase font-bold ${tierStyle.text}`}>{trader.tier}</span>
-                           <div className="flex items-center gap-1.5">
-                               <span className="text-[9px] text-[#57534e] uppercase font-bold tracking-wider">30d Vol</span>
-                               <span className="text-[#e7e5e4] text-xs font-mono">${(trader.realVolume).toLocaleString()}</span>
+                           <div className="flex items-center gap-3">
+                               {/* NEW: Referral Volume Pill (Only if > 0) */}
+                               {hasReferralVol && (
+                                   <div className="flex items-center gap-1 opacity-70">
+                                       <span className="text-[9px] text-[#57534e] uppercase font-bold tracking-wider">Ref</span>
+                                       <span className="text-[#a8a29e] text-[10px] font-mono">${(trader.referralVolume30d).toLocaleString()}</span>
+                                   </div>
+                               )}
+
+                               <div className="flex items-center gap-1.5">
+                                   <span className="text-[9px] text-[#57534e] uppercase font-bold tracking-wider">30d Vol</span>
+                                   <span className="text-[#e7e5e4] text-xs font-mono">${(trader.realVolume).toLocaleString()}</span>
+                               </div>
                            </div>
                         </div>
                       </Link>
@@ -349,14 +392,14 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setMetricModal(null)}>
           <div className="bg-[#1c1917] border border-[#44403c] p-8 max-w-2xl w-full mx-4 shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
              <h3 className="text-xl text-[#e7e5e4] uppercase tracking-widest font-bold mb-6">
-               {metricModal === 'volume' ? 'Volume Trend (30 Days)' : 'Daily Active Traders (30 Days)'}
+               {metricModal === 'volume' && 'Volume Trend (30 Days)'}
+               {metricModal === 'referral' && 'Referral Volume Trend (30 Days)'}
+               {metricModal === 'active' && 'Daily Active Traders (30 Days)'}
              </h3>
              <div className="h-64 border-b border-[#44403c] pb-2">
-                {metricModal === 'volume' ? (
-                    <RealLineChart data={chartDataVolume} />
-                ) : (
-                    <RealBarChart data={chartDataActive} />
-                )}
+                {metricModal === 'volume' && <RealLineChart data={chartDataVolume} />}
+                {metricModal === 'referral' && <RealLineChart data={chartDataReferral} />}
+                {metricModal === 'active' && <RealBarChart data={chartDataActive} />}
              </div>
              <div className="flex justify-between text-[#57534e] text-xs uppercase mt-2">
                <span>30 Days Ago</span>

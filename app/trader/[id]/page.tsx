@@ -11,6 +11,9 @@ import { NotesSection } from './NotesSection'
 import { ActivityCalendar } from './ActivityCalendar'
 import { TagManager } from './TagManager'
 import { RecentTrades } from './RecentTrades'
+import { ReferralStats } from './ReferralStats'
+import { DealSection } from './DealSection'
+import { AssetHoldings } from './AssetHoldings' // NEW IMPORT
 
 export default async function TraderPage({ params }: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies()
@@ -19,10 +22,13 @@ export default async function TraderPage({ params }: { params: Promise<{ id: str
   const resolvedParams = await params
   const { id } = resolvedParams
   
-  // 1. Fetch Basic DB Data
+  // 1. Fetch Basic DB Data WITH DEAL
   const trader = await db.trader.findUnique({
     where: { id: id },
-    include: { addedBy: true } 
+    include: { 
+        addedBy: true,
+        deal: true 
+    } 
   })
 
   if (!trader) redirect('/dashboard')
@@ -84,20 +90,20 @@ export default async function TraderPage({ params }: { params: Promise<{ id: str
                  <TagManager traderId={trader.id} initialTags={tags} />
 
                  {/* Key Stats Grid */}
-                 <div className="grid grid-cols-1 gap-2">
+                 <div className="grid grid-cols-1 gap-2 mb-4">
                     {/* Real 30D Volume */}
                     <div className="bg-[#1c1917] p-4 border border-[#292524] flex justify-between items-center">
                         <span className="text-[10px] text-[#57534e] uppercase font-bold tracking-widest">30D Volume</span>
                         <span className="text-sm font-mono text-[#e7e5e4]">${liveData.volume30d.toLocaleString()}</span>
                     </div>
 
-                    {/* NEW: Total Volume (All Time) */}
+                    {/* Total Volume */}
                     <div className="bg-[#1c1917] p-4 border border-[#292524] flex justify-between items-center">
                         <span className="text-[10px] text-[#57534e] uppercase font-bold tracking-widest">Total Volume</span>
                         <span className="text-sm font-mono text-[#e7e5e4]">${liveData.totalVolume.toLocaleString()}</span>
                     </div>
 
-                    {/* Manual Tier (Visual Only) */}
+                    {/* Manual Tier */}
                     <div className="bg-[#1c1917] p-4 border border-[#292524] flex justify-between items-center">
                         <span className="text-[10px] text-[#57534e] uppercase font-bold tracking-widest">Assigned Tier</span>
                         <span className={`text-xs font-bold uppercase px-2 py-1 ${trader.tier === 'Tier 1' ? 'bg-amber-900/20 text-amber-500' : 'text-[#a8a29e]'}`}>{trader.tier}</span>
@@ -109,6 +115,20 @@ export default async function TraderPage({ params }: { params: Promise<{ id: str
                         <span className="text-xs text-[#e7e5e4]">{liveData.lastActive ? formatDistanceToNow(new Date(liveData.lastActive), { addSuffix: true }) : 'Never'}</span>
                     </div>
                  </div>
+
+                 {/* DEAL SECTION */}
+                 <DealSection traderId={trader.id} initialDeal={trader.deal} />
+
+                 {/* NEW: Asset Holdings */}
+                 <div className="mt-6">
+                    <AssetHoldings assets={liveData.assets} />
+                 </div>
+
+                 {/* Referral Analysis */}
+                 <div className="mt-6">
+                    <ReferralStats stats={liveData.referralStats} />
+                 </div>
+
                </div>
 
                {/* Notes Section */}

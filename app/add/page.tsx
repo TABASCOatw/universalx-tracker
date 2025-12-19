@@ -3,10 +3,9 @@
 import { useState } from 'react'
 import { addTrader } from '../actions'
 import Link from 'next/link'
-import { ArrowLeft, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, X, Loader2, Handshake, Plus, Check } from 'lucide-react'
 import { useFormStatus } from 'react-dom'
 
-// 1. EXTRACT BUTTON COMPONENT
 function SubmitButton() {
   const { pending } = useFormStatus()
 
@@ -22,16 +21,20 @@ function SubmitButton() {
           LOADING ACCOUNT...
         </>
       ) : (
-        'Initialize Trader'
+        'Add Trader'
       )}
     </button>
   )
 }
 
 export default function AddTraderPage() {
-  const [tier, setTier] = useState('Tier 3')
   const [tags, setTags] = useState<string[]>([])
   const [customTagInput, setCustomTagInput] = useState('')
+  
+  // NEW STATES
+  const [selectedTier, setSelectedTier] = useState('Tier 3')
+  const [addDeal, setAddDeal] = useState(false)
+  const [showExtraTiers, setShowExtraTiers] = useState(false)
 
   const PREMADE_TAGS = ['Not trading', 'KOL', 'Active trader', 'Whale', 'Tester']
 
@@ -53,25 +56,10 @@ export default function AddTraderPage() {
     }
   }
 
-  const tiers = [
-    {
-      id: "Tier 1",
-      label: "Tier 1",
-      description: "Strong, high-volume",
-      activeClass: "text-amber-500 border-amber-600 bg-amber-900/10"
-    },
-    {
-      id: "Tier 2",
-      label: "Tier 2",
-      description: "Potentially high volume",
-      activeClass: "text-blue-400 border-blue-800 bg-blue-900/10"
-    },
-    {
-      id: "Tier 3",
-      label: "Tier 3",
-      description: "Low volume expectations",
-      activeClass: "text-[#a8a29e] border-[#44403c] bg-[#292524]/50"
-    }
+  const tierOptions = [
+    { id: 'Tier 1', label: 'Tier 1', desc: 'High volume expectations', color: 'border-amber-600 bg-amber-900/10 text-amber-500' },
+    { id: 'Tier 2', label: 'Tier 2', desc: 'Potentially high volume', color: 'border-blue-800 bg-blue-900/10 text-blue-400' },
+    { id: 'Tier 3', label: 'Tier 3', desc: 'Low volume expectations', color: 'border-[#44403c] bg-[#292524] text-[#a8a29e]' },
   ]
 
   return (
@@ -86,19 +74,19 @@ export default function AddTraderPage() {
           <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-[#292524] to-transparent opacity-50"></div>
 
           <div className="mb-8 border-b border-[#292524] pb-4">
-            <h1 className="text-2xl font-bold text-[#e7e5e4] mb-1 uppercase tracking-[0.1em]">Onboard Operative</h1>
-            <p className="text-[#57534e] text-xs uppercase tracking-widest">Enter trader credentials</p>
+            <h1 className="text-2xl font-bold text-[#e7e5e4] mb-1 uppercase tracking-[0.1em]">Onboard Trader</h1>
+            <p className="text-[#57534e] text-xs uppercase tracking-widest">Enter trader info</p>
           </div>
 
           <form action={addTrader} className="space-y-6">
             
             <input type="hidden" name="tags" value={tags.join(',')} />
-            <input type="hidden" name="tier" value={tier} />
+            <input type="hidden" name="tier" value={selectedTier} />
 
             {/* IDENTITY */}
             <div className="space-y-4">
               <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">Identity</label>
-              <input name="name" required placeholder="Trader Name" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
+              <input name="name" required placeholder="Name" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
               
               <div className="grid grid-cols-2 gap-4">
                 <input name="xAccountLink" required placeholder="X Profile (x.com/...)" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
@@ -152,8 +140,59 @@ export default function AddTraderPage() {
             <div className="space-y-4 pt-4 border-t border-[#292524]">
                <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">UniversalX Config</label>
                <input name="uxAddress" required placeholder="EVM or Solana Address" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
-               <p className="text-[10px] text-[#57534e] -mt-2">Solana addresses will auto-resolve to EVM.</p>
                <input name="referralCode" placeholder="Referral Code (Optional)" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
+            </div>
+
+            {/* DEALS SECTION */}
+            <div className="space-y-4 pt-4 border-t border-[#292524]">
+                <div 
+                    className="flex items-center gap-2 cursor-pointer group"
+                    onClick={() => setAddDeal(!addDeal)}
+                >
+                    <div className={`w-4 h-4 border border-[#57534e] flex items-center justify-center transition-colors ${addDeal ? 'bg-amber-700 border-amber-700' : 'bg-[#0c0a09]'}`}>
+                        {addDeal && <X size={10} className="text-white" />}
+                    </div>
+                    <label className="text-[10px] uppercase font-bold text-[#57534e] group-hover:text-[#e7e5e4] transition-colors tracking-widest cursor-pointer flex items-center gap-2">
+                       <Handshake size={12} /> Deals - Add Deal
+                    </label>
+                </div>
+                
+                {addDeal && (
+                    <div className="bg-[#292524]/20 border border-[#292524] p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <input type="hidden" name="hasDeal" value="on" />
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                             <div>
+                                <label className="text-[9px] uppercase font-bold text-[#57534e] tracking-widest block mb-1">Retainer ($)</label>
+                                <input type="number" name="retainer" placeholder="0" className="w-full bg-[#0c0a09] border border-[#292524] p-3 text-[#e7e5e4] focus:border-amber-700 outline-none transition text-xs font-mono" />
+                             </div>
+                             <div>
+                                <label className="text-[9px] uppercase font-bold text-[#57534e] tracking-widest block mb-1">Cashback (%)</label>
+                                <input type="number" name="cashback" placeholder="0%" className="w-full bg-[#0c0a09] border border-[#292524] p-3 text-[#e7e5e4] focus:border-amber-700 outline-none transition text-xs font-mono" />
+                             </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[9px] uppercase font-bold text-[#57534e] tracking-widest block mb-2">Commission Structure (%)</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <input type="number" name="commTier1" placeholder="Tier 1" className="bg-[#0c0a09] border border-[#292524] p-2 text-[#e7e5e4] focus:border-amber-700 outline-none text-xs font-mono" />
+                                <input type="number" name="commTier2" placeholder="Tier 2" className="bg-[#0c0a09] border border-[#292524] p-2 text-[#e7e5e4] focus:border-amber-700 outline-none text-xs font-mono" />
+                                <input type="number" name="commTier3" placeholder="Tier 3" className="bg-[#0c0a09] border border-[#292524] p-2 text-[#e7e5e4] focus:border-amber-700 outline-none text-xs font-mono" />
+                            </div>
+                            
+                            {!showExtraTiers ? (
+                                <button type="button" onClick={() => setShowExtraTiers(true)} className="mt-2 text-[9px] text-[#57534e] hover:text-amber-600 uppercase font-bold tracking-widest flex items-center gap-1">
+                                    <Plus size={10} /> Add Tier 4 & 5
+                                </button>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2 mt-2 animate-in fade-in">
+                                    <input type="number" name="commTier4" placeholder="Tier 4" className="bg-[#0c0a09] border border-[#292524] p-2 text-[#e7e5e4] focus:border-amber-700 outline-none text-xs font-mono" />
+                                    <input type="number" name="commTier5" placeholder="Tier 5" className="bg-[#0c0a09] border border-[#292524] p-2 text-[#e7e5e4] focus:border-amber-700 outline-none text-xs font-mono" />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* NOTES */}
@@ -167,25 +206,27 @@ export default function AddTraderPage() {
                 />
             </div>
 
-            {/* TIER SELECTION */}
-            <div className="space-y-3 pt-4 border-t border-[#292524]">
-                <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">Trader Tier</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {tiers.map((t) => (
-                    <div 
-                      key={t.id}
-                      onClick={() => setTier(t.id)}
-                      className={`
-                        cursor-pointer p-3 sm:p-4 rounded border transition-all duration-200 
-                        flex flex-col items-center justify-center text-center gap-1
-                        ${tier === t.id ? t.activeClass : 'border-[#292524] bg-[#0c0a09] text-[#57534e] hover:border-[#44403c]'}
-                      `}
-                    >
-                      <div className="font-bold text-sm sm:text-base">{t.label}</div>
-                      <div className="text-[8px] sm:text-[10px] uppercase tracking-wide opacity-80">{t.description}</div>
-                    </div>
-                  ))}
-                </div>
+            {/* MANUAL TIER SELECTION */}
+            <div className={`pt-6 pb-2 border-t border-[#292524]`}>
+               <label className="text-[10px] uppercase text-[#57534e] font-bold tracking-widest mb-4 block">Assign Tier</label>
+               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {tierOptions.map((opt) => {
+                    const isSelected = selectedTier === opt.id
+                    return (
+                        <div 
+                          key={opt.id}
+                          onClick={() => setSelectedTier(opt.id)}
+                          className={`cursor-pointer border p-3 flex flex-col gap-1 transition-all ${isSelected ? opt.color : 'border-[#292524] bg-[#1c1917] opacity-60 hover:opacity-100 hover:border-[#44403c]'}`}
+                        >
+                            <div className="flex justify-between items-center">
+                                <span className={`text-sm font-bold uppercase ${isSelected ? '' : 'text-[#e7e5e4]'}`}>{opt.label}</span>
+                                {isSelected && <Check size={14} />}
+                            </div>
+                            <span className="text-[9px] uppercase tracking-wide font-medium opacity-80">{opt.desc}</span>
+                        </div>
+                    )
+                  })}
+               </div>
             </div>
 
             <SubmitButton />
