@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { addTrader } from '../actions'
 import Link from 'next/link'
-import { ArrowLeft, X, Plus, Loader2 } from 'lucide-react'
-import { useFormStatus } from 'react-dom' // Import this
+import { ArrowLeft, X, Loader2 } from 'lucide-react'
+import { useFormStatus } from 'react-dom'
 
 // 1. EXTRACT BUTTON COMPONENT
 function SubmitButton() {
@@ -29,7 +29,7 @@ function SubmitButton() {
 }
 
 export default function AddTraderPage() {
-  const [volume, setVolume] = useState(0)
+  const [tier, setTier] = useState('Tier 3')
   const [tags, setTags] = useState<string[]>([])
   const [customTagInput, setCustomTagInput] = useState('')
 
@@ -53,13 +53,26 @@ export default function AddTraderPage() {
     }
   }
 
-  const getTier = (vol: number) => {
-    if (vol < 100000) return { label: 'Tier 3', color: 'text-[#78716c]', border: 'border-[#44403c]' }
-    if (vol < 1000000) return { label: 'Tier 2', color: 'text-blue-400', border: 'border-blue-900' }
-    return { label: 'Tier 1', color: 'text-amber-500 font-bold', border: 'border-amber-600' }
-  }
-  
-  const tier = getTier(volume)
+  const tiers = [
+    {
+      id: "Tier 1",
+      label: "Tier 1",
+      description: "Strong, high-volume",
+      activeClass: "text-amber-500 border-amber-600 bg-amber-900/10"
+    },
+    {
+      id: "Tier 2",
+      label: "Tier 2",
+      description: "Potentially high volume",
+      activeClass: "text-blue-400 border-blue-800 bg-blue-900/10"
+    },
+    {
+      id: "Tier 3",
+      label: "Tier 3",
+      description: "Low volume expectations",
+      activeClass: "text-[#a8a29e] border-[#44403c] bg-[#292524]/50"
+    }
+  ]
 
   return (
     <main className="min-h-screen bg-[#0c0a09] flex items-center justify-center p-6 font-sans">
@@ -80,6 +93,7 @@ export default function AddTraderPage() {
           <form action={addTrader} className="space-y-6">
             
             <input type="hidden" name="tags" value={tags.join(',')} />
+            <input type="hidden" name="tier" value={tier} />
 
             {/* IDENTITY */}
             <div className="space-y-4">
@@ -137,7 +151,8 @@ export default function AddTraderPage() {
             {/* CONFIG */}
             <div className="space-y-4 pt-4 border-t border-[#292524]">
                <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">UniversalX Config</label>
-               <input name="uxAddress" required placeholder="EVM Address" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
+               <input name="uxAddress" required placeholder="EVM or Solana Address" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
+               <p className="text-[10px] text-[#57534e] -mt-2">Solana addresses will auto-resolve to EVM.</p>
                <input name="referralCode" placeholder="Referral Code (Optional)" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
             </div>
 
@@ -152,28 +167,27 @@ export default function AddTraderPage() {
                 />
             </div>
 
-            {/* VOLUME */}
-            <div className={`pt-6 pb-2 border-t border-[#292524]`}>
-              <div className="flex justify-between items-center mb-4">
-                <label className="text-[10px] uppercase text-[#57534e] font-bold tracking-widest">Est. Monthly Volume</label>
-                <span className={`px-3 py-1 text-xs border ${tier.color} ${tier.border} bg-[#0c0a09] uppercase font-bold`}>{tier.label}</span>
-              </div>
-              <input 
-                type="range" 
-                name="volume"
-                min="0" 
-                max="1500000" 
-                step="10000" 
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                className="w-full h-1 bg-[#292524] appearance-none cursor-pointer accent-amber-600 hover:accent-amber-500"
-              />
-              <div className="text-right text-xl font-bold text-[#e7e5e4] mt-2 font-mono">
-                ${volume.toLocaleString()}{volume >= 1500000 ? '+' : ''}
-              </div>
+            {/* TIER SELECTION */}
+            <div className="space-y-3 pt-4 border-t border-[#292524]">
+                <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">Trader Tier</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {tiers.map((t) => (
+                    <div 
+                      key={t.id}
+                      onClick={() => setTier(t.id)}
+                      className={`
+                        cursor-pointer p-3 sm:p-4 rounded border transition-all duration-200 
+                        flex flex-col items-center justify-center text-center gap-1
+                        ${tier === t.id ? t.activeClass : 'border-[#292524] bg-[#0c0a09] text-[#57534e] hover:border-[#44403c]'}
+                      `}
+                    >
+                      <div className="font-bold text-sm sm:text-base">{t.label}</div>
+                      <div className="text-[8px] sm:text-[10px] uppercase tracking-wide opacity-80">{t.description}</div>
+                    </div>
+                  ))}
+                </div>
             </div>
 
-            {/* 2. REPLACE STANDARD BUTTON WITH CUSTOM ONE */}
             <SubmitButton />
           </form>
         </div>
