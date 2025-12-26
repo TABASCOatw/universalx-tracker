@@ -66,20 +66,38 @@ export interface Asset {
 }
 
 export class UniversalXService {
-  static async fetchUserActivity(evmAddress: string) {
+  static async fetchUserActivity(address: string) {
     try {
-      const res = await fetch(`${ACTIVITY_API}?evmAddress=${evmAddress}`, {
-        next: { revalidate: 3600 } 
+      // 1. Trim and detect address type
+      const cleanAddress = address.trim();
+      const isEvm = cleanAddress.startsWith('0x');
+      const queryParam = isEvm ? `evmAddress=${cleanAddress}` : `solanaAddress=${cleanAddress}`;
+
+      console.log(`[UniversalX] Fetching activity for: ${cleanAddress} (${queryParam})`);
+
+      // 2. Fetch with no-store to prevent caching old/empty results during dev
+      const res = await fetch(`${ACTIVITY_API}?${queryParam}`, {
+        cache: 'no-store' 
       });
-      const json: ActivityResponse = await res.json();
+
+      if (!res.ok) {
+        console.error(`[UniversalX] Activity API failed: ${res.status}`);
+        return null;
+      }
+
+      const json = await res.json();
+      // Debug log to check the structure returned by the API
+      // console.log("[UniversalX] API Response:", JSON.stringify(json, null, 2)); 
       return json;
     } catch (e) {
-      console.error("Activity API Error:", e);
+      console.error("[UniversalX] Activity API Error:", e);
       return null;
     }
   }
 
   static async fetchTransactions(walletAddress: string) {
+    if (!walletAddress) return [];
+    
     let allTransactions: Transaction[] = [];
     const MAX_PAGES = 3; 
 
@@ -136,14 +154,32 @@ export class UniversalXService {
                   logo: item.logo_url
               }));
       } catch (e) {
-          console.error(`Error fetching ${chainLabel} assets:`, e);
+          // Suppress errors for clean logs, or enable for debugging
+          // console.error(`Error fetching ${chainLabel} assets:`, e);
           return [];
       }
   }
 
   static async getTraderData(address: string) {
-    const activity = await this.fetchUserActivity(address);
-    const transactions = await this.fetchTransactions(address);
+    const cleanAddress = address.trim();
+    const activity = await this.fetchUserActivity(cleanAddress);
+
+    // 3. Resolve EVM Address robustly
+    // We check both camelCase (interface) and snake_case (potential API raw)
+    const basicInfo = (activity as any)?.basicInfo || (activity as any)?.basic_info;
+    
+    // Attempt to get EVM address from API response
+    let apiEvmAddress = basicInfo?.evmAddress || basicInfo?.evm_address;
+
+    // Fallback: If input was already EVM (starts with 0x), use it.
+    // If input was Solana and API failed to return EVM, we can't fetch txs.
+    const resolvedEvmAddress = apiEvmAddress || (cleanAddress.startsWith('0x') ? cleanAddress : "");
+    const resolvedSolAddress = basicInfo?.solanaAddress || basicInfo?.solana_address || (!cleanAddress.startsWith('0x') ? cleanAddress : "");
+
+    console.log(`[UniversalX] Resolved Addresses -> EVM: ${resolvedEvmAddress}, SOL: ${resolvedSolAddress}`);
+
+    // Fetch transactions using the resolved EVM address.
+    const transactions = resolvedEvmAddress ? await this.fetchTransactions(resolvedEvmAddress) : [];
 
     const dailyMap = new Map<string, number>();
     const now = new Date();
@@ -200,15 +236,12 @@ export class UniversalXService {
     };
 
     // --- NEW: FETCH ASSETS ---
-    const evmAddr = activity?.basicInfo?.evmAddress || address;
-    const solAddr = activity?.basicInfo?.solanaAddress || "";
-
-    // Fetch all chains in parallel
+    // Fetch all chains in parallel using resolved addresses
     const [ethAssets, baseAssets, bnbAssets, solAssets] = await Promise.all([
-        this.fetchChainAssets("eth-mainnet", evmAddr, 'ETH'),
-        this.fetchChainAssets("base-mainnet", evmAddr, 'BASE'),
-        this.fetchChainAssets("bsc-mainnet", evmAddr, 'BNB'),
-        solAddr ? this.fetchChainAssets("solana-mainnet", solAddr, 'SOL') : Promise.resolve([])
+        this.fetchChainAssets("eth-mainnet", resolvedEvmAddress, 'ETH'),
+        this.fetchChainAssets("base-mainnet", resolvedEvmAddress, 'BASE'),
+        this.fetchChainAssets("bsc-mainnet", resolvedEvmAddress, 'BNB'),
+        resolvedSolAddress ? this.fetchChainAssets("solana-mainnet", resolvedSolAddress, 'SOL') : Promise.resolve([])
     ]);
 
     const allAssets = [...ethAssets, ...baseAssets, ...bnbAssets, ...solAssets]
