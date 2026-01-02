@@ -4,7 +4,7 @@ const RPC_URL = "https://universal-rpc-staging.particle.network/";
 const ACTIVITY_API = "https://universal-app-api-staging.particle.network/user_activity";
 
 // --- NEW: COVALENT CONFIG ---
-const COVALENT_API_KEY = process.env.COVALENT_API_KEY || "cqt_rQvR7qJTDhXP7h9PrJyv6Xgg8qjv"; // <--- REPLACE THIS
+const COVALENT_API_KEY = process.env.COVALENT_API_KEY || "cqt_rQvR7qJTDhXP7h9PrJyv6Xgg8qjv"; 
 const COVALENT_BASE_URL = "https://api.covalenthq.com/v1";
 
 interface Transaction {
@@ -43,18 +43,6 @@ interface InviteAnalysis {
   }>;
 }
 
-interface ActivityResponse {
-  basicInfo: {
-      evmAddress: string;
-      solanaAddress: string;
-  };
-  tradeAnalysis: {
-    tradingVolume: number;
-    lastTradeAt: string;
-  };
-  inviteAnalysis?: InviteAnalysis; 
-}
-
 // NEW: Asset Interface
 export interface Asset {
     chain: 'ETH' | 'BASE' | 'BNB' | 'SOL';
@@ -68,14 +56,12 @@ export interface Asset {
 export class UniversalXService {
   static async fetchUserActivity(address: string) {
     try {
-      // 1. Trim and detect address type
       const cleanAddress = address.trim();
       const isEvm = cleanAddress.startsWith('0x');
       const queryParam = isEvm ? `evmAddress=${cleanAddress}` : `solanaAddress=${cleanAddress}`;
 
-      console.log(`[UniversalX] Fetching activity for: ${cleanAddress} (${queryParam})`);
+      console.log(`[UniversalX] Fetching activity for: ${cleanAddress}`);
 
-      // 2. Fetch with no-store to prevent caching old/empty results during dev
       const res = await fetch(`${ACTIVITY_API}?${queryParam}`, {
         cache: 'no-store' 
       });
@@ -85,10 +71,7 @@ export class UniversalXService {
         return null;
       }
 
-      const json = await res.json();
-      // Debug log to check the structure returned by the API
-      // console.log("[UniversalX] API Response:", JSON.stringify(json, null, 2)); 
-      return json;
+      return await res.json();
     } catch (e) {
       console.error("[UniversalX] Activity API Error:", e);
       return null;
@@ -133,7 +116,6 @@ export class UniversalXService {
     return allTransactions;
   }
 
-  // --- NEW: FETCH ASSETS FROM COVALENT ---
   static async fetchChainAssets(chainName: string, address: string, chainLabel: 'ETH' | 'BASE' | 'BNB' | 'SOL'): Promise<Asset[]> {
       if (!address) return [];
       try {
@@ -154,33 +136,76 @@ export class UniversalXService {
                   logo: item.logo_url
               }));
       } catch (e) {
-          // Suppress errors for clean logs, or enable for debugging
-          // console.error(`Error fetching ${chainLabel} assets:`, e);
           return [];
       }
   }
 
-  static async getTraderData(address: string) {
-    const cleanAddress = address.trim();
-    const activity = await this.fetchUserActivity(cleanAddress);
+  // UPDATED: Now accepts "addr1,addr2" and aggregates data
+  static async getTraderData(addressString: string) {
+    const rawAddresses = addressString.split(',').map(a => a.trim()).filter(Boolean);
+    const uniqueAddresses = Array.from(new Set(rawAddresses));
 
-    // 3. Resolve EVM Address robustly
-    // We check both camelCase (interface) and snake_case (potential API raw)
-    const basicInfo = (activity as any)?.basicInfo || (activity as any)?.basic_info;
-    
-    // Attempt to get EVM address from API response
-    let apiEvmAddress = basicInfo?.evmAddress || basicInfo?.evm_address;
+    let grandTotalVolume = 0;
+    let allTransactions: Transaction[] = [];
+    let allAssets: Asset[] = [];
+    let latestActive = new Date(0);
 
-    // Fallback: If input was already EVM (starts with 0x), use it.
-    // If input was Solana and API failed to return EVM, we can't fetch txs.
-    const resolvedEvmAddress = apiEvmAddress || (cleanAddress.startsWith('0x') ? cleanAddress : "");
-    const resolvedSolAddress = basicInfo?.solanaAddress || basicInfo?.solana_address || (!cleanAddress.startsWith('0x') ? cleanAddress : "");
+    let combinedReferralStats = {
+        totalVolume: 0,
+        volume30d: 0,
+        totalCommission: 0,
+        totalInvitees: 0,
+        history: [] as any[]
+    };
+    const referralHistoryMap: Record<string, number> = {};
 
-    console.log(`[UniversalX] Resolved Addresses -> EVM: ${resolvedEvmAddress}, SOL: ${resolvedSolAddress}`);
+    // 1. Parallel Fetching for ALL addresses
+    await Promise.all(uniqueAddresses.map(async (address) => {
+        // A. Activity
+        const activity = await this.fetchUserActivity(address);
 
-    // Fetch transactions using the resolved EVM address.
-    const transactions = resolvedEvmAddress ? await this.fetchTransactions(resolvedEvmAddress) : [];
+        // B. Resolve Addresses (EVM/SOL)
+        const basicInfo = (activity as any)?.basicInfo || (activity as any)?.basic_info;
+        const apiEvmAddress = basicInfo?.evmAddress || basicInfo?.evm_address;
+        const resolvedEvmAddress = apiEvmAddress || (address.startsWith('0x') ? address : "");
+        const resolvedSolAddress = basicInfo?.solanaAddress || basicInfo?.solana_address || (!address.startsWith('0x') ? address : "");
 
+        // C. Transactions
+        const txs = resolvedEvmAddress ? await this.fetchTransactions(resolvedEvmAddress) : [];
+        allTransactions.push(...txs);
+
+        // D. Assets
+        const [eth, base, bnb, sol] = await Promise.all([
+            this.fetchChainAssets("eth-mainnet", resolvedEvmAddress, 'ETH'),
+            this.fetchChainAssets("base-mainnet", resolvedEvmAddress, 'BASE'),
+            this.fetchChainAssets("bsc-mainnet", resolvedEvmAddress, 'BNB'),
+            resolvedSolAddress ? this.fetchChainAssets("solana-mainnet", resolvedSolAddress, 'SOL') : Promise.resolve([])
+        ]);
+        allAssets.push(...eth, ...base, ...bnb, ...sol);
+
+        // E. Aggregate Simple Stats
+        grandTotalVolume += (activity?.tradeAnalysis?.tradingVolume || 0);
+        
+        const lastAt = activity?.tradeAnalysis?.lastTradeAt ? new Date(activity.tradeAnalysis.lastTradeAt) : new Date(0);
+        if (lastAt > latestActive) latestActive = lastAt;
+
+        // F. Aggregate Referral Stats
+        const ref = activity?.inviteAnalysis;
+        combinedReferralStats.totalVolume += (ref?.allTierInviteeAnalysis?.tradeVolume || 0);
+        combinedReferralStats.totalCommission += (ref?.overview?.totalInviteRewards || 0);
+        combinedReferralStats.totalInvitees += (ref?.overview?.totalInviteeCount || 0);
+
+        // Sum 30d Referral Volume
+        const ref30d = ref?.last30dStats?.reduce((acc: number, day: any) => acc + (day.tier1InviterTradeVolume || 0), 0) || 0;
+        combinedReferralStats.volume30d += ref30d;
+
+        // Merge Referral History
+        ref?.last30dStats?.forEach((day: any) => {
+            referralHistoryMap[day.date] = (referralHistoryMap[day.date] || 0) + (day.tier1InviterTradeVolume || 0);
+        });
+    }));
+
+    // 2. Process Aggregated Transactions (Calendar & 30d Vol)
     const dailyMap = new Map<string, number>();
     const now = new Date();
     const thirtyDaysAgo = new Date();
@@ -188,7 +213,7 @@ export class UniversalXService {
 
     let volume30d = 0; 
 
-    transactions.forEach(tx => {
+    allTransactions.forEach(tx => {
         const date = new Date(tx.createdAt);
         if (date >= thirtyDaysAgo) {
             const key = date.toISOString().split('T')[0];
@@ -211,50 +236,33 @@ export class UniversalXService {
         });
     }
 
-    const recentTrades = transactions.slice(0, 10).map(tx => ({
-        token: tx.targetToken?.symbol || "Unknown",
-        type: tx.tag === 'buy' ? 'Buy' : 'Sell',
-        size: `$${Math.abs(parseFloat(tx.change.amountInUSD)).toFixed(2)}`,
-        time: new Date(tx.createdAt),
-        image: tx.targetToken?.image
+    const recentTrades = allTransactions
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10)
+        .map(tx => ({
+            token: tx.targetToken?.symbol || "Unknown",
+            type: tx.tag === 'buy' ? 'Buy' : 'Sell',
+            size: `$${Math.abs(parseFloat(tx.change.amountInUSD)).toFixed(2)}`,
+            time: new Date(tx.createdAt),
+            image: tx.targetToken?.image
+        }));
+
+    combinedReferralStats.history = Object.keys(referralHistoryMap).sort().map(date => ({
+        date,
+        val: referralHistoryMap[date]
     }));
 
-    const referral = activity?.inviteAnalysis;
-    const referralVolume30d = referral?.last30dStats?.reduce((acc, day) => {
-        return acc + (day.tier1InviterTradeVolume || 0);
-    }, 0) || 0;
-
-    const referralStats = {
-        totalVolume: referral?.allTierInviteeAnalysis?.tradeVolume || 0,
-        volume30d: referralVolume30d,
-        totalCommission: referral?.overview?.totalInviteRewards || 0,
-        totalInvitees: referral?.overview?.totalInviteeCount || 0,
-        history: referral?.last30dStats?.map(day => ({
-            date: day.date,
-            val: day.tier1InviterTradeVolume || 0
-        })) || []
-    };
-
-    // --- NEW: FETCH ASSETS ---
-    // Fetch all chains in parallel using resolved addresses
-    const [ethAssets, baseAssets, bnbAssets, solAssets] = await Promise.all([
-        this.fetchChainAssets("eth-mainnet", resolvedEvmAddress, 'ETH'),
-        this.fetchChainAssets("base-mainnet", resolvedEvmAddress, 'BASE'),
-        this.fetchChainAssets("bsc-mainnet", resolvedEvmAddress, 'BNB'),
-        resolvedSolAddress ? this.fetchChainAssets("solana-mainnet", resolvedSolAddress, 'SOL') : Promise.resolve([])
-    ]);
-
-    const allAssets = [...ethAssets, ...baseAssets, ...bnbAssets, ...solAssets]
-        .sort((a, b) => b.value - a.value); // Sort by highest value
+    // Sort combined assets by value
+    allAssets.sort((a, b) => b.value - a.value);
 
     return {
-        totalVolume: activity?.tradeAnalysis?.tradingVolume || 0, 
+        totalVolume: grandTotalVolume, 
         volume30d: volume30d,
-        lastActive: activity?.tradeAnalysis?.lastTradeAt ? new Date(activity.tradeAnalysis.lastTradeAt) : new Date(),
+        lastActive: latestActive.getTime() === 0 ? new Date() : latestActive,
         calendarData,
         recentTrades,
-        referralStats,
-        assets: allAssets // Return assets
+        referralStats: combinedReferralStats,
+        assets: allAssets
     };
   }
 }

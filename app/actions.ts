@@ -80,7 +80,7 @@ export async function addTrader(formData: FormData) {
       xHandle: `@${handle}`,
       xProfilePic: profilePicUrl,
       
-      expectedVolume: 0, // No longer used, set to 0 to satisfy schema
+      expectedVolume: 0, // No longer used
       realVolume: data.volume30d,      
       
       historyData: JSON.stringify(data.calendarData),
@@ -93,7 +93,6 @@ export async function addTrader(formData: FormData) {
       tags: formData.get('tags') as string,
       notes: (formData.get('notes') as string) || null,
       
-      // CONNECT DEAL
       deal: hasDeal ? dealData : undefined
     }
   })
@@ -105,32 +104,21 @@ export async function addTrader(formData: FormData) {
 // --- UPDATE DEAL ---
 export async function updateTraderDeal(formData: FormData) {
     const traderId = formData.get('traderId') as string;
-    
     const retainer = formData.get('retainer') ? parseFloat(formData.get('retainer') as string) : null;
     const cashback = formData.get('cashback') ? parseFloat(formData.get('cashback') as string) : null;
-    
-    // Commission
     const commTier1 = formData.get('commTier1') ? parseFloat(formData.get('commTier1') as string) : null;
     const commTier2 = formData.get('commTier2') ? parseFloat(formData.get('commTier2') as string) : null;
     const commTier3 = formData.get('commTier3') ? parseFloat(formData.get('commTier3') as string) : null;
     const commTier4 = formData.get('commTier4') ? parseFloat(formData.get('commTier4') as string) : null;
     const commTier5 = formData.get('commTier5') ? parseFloat(formData.get('commTier5') as string) : null;
 
-    const dataPayload = {
-        retainerAmount: retainer,
-        cashbackPercent: cashback,
-        commTier1, commTier2, commTier3, commTier4, commTier5
-    };
+    const dataPayload = { retainerAmount: retainer, cashbackPercent: cashback, commTier1, commTier2, commTier3, commTier4, commTier5 };
 
     await db.deal.upsert({
         where: { traderId: traderId },
         update: dataPayload,
-        create: {
-            traderId: traderId,
-            ...dataPayload
-        }
+        create: { traderId: traderId, ...dataPayload }
     });
-
     revalidatePath(`/trader/${traderId}`);
 }
 
@@ -138,19 +126,13 @@ export async function updateTraderDeal(formData: FormData) {
 export async function updateTraderNotes(formData: FormData) {
   const traderId = formData.get('traderId') as string
   const notes = formData.get('notes') as string
-  
-  await db.trader.update({
-    where: { id: traderId },
-    data: { notes: notes }
-  })
-  
+  await db.trader.update({ where: { id: traderId }, data: { notes: notes } })
   revalidatePath(`/trader/${traderId}`)
 }
 
 // --- REFRESH DATA (SYNC ONLY) ---
 export async function refreshTraderData(traderId: string, address: string) {
     const data = await UniversalXService.getTraderData(address);
-    
     await db.trader.update({
         where: { id: traderId },
         data: {
@@ -161,7 +143,6 @@ export async function refreshTraderData(traderId: string, address: string) {
             referralHistory: JSON.stringify(data.referralStats.history),
         }
     });
-
     return data;
 }
 
@@ -170,7 +151,6 @@ export async function deleteTrader(traderId: String) {
     const cookieStore = await cookies()
     const userId = cookieStore.get('userId')?.value
     if (!userId) return 
-    
     const trader = await db.trader.findUnique({ where: { id: traderId as string }})
     if (trader && trader.addedById === userId) {
         await db.trader.delete({ where: { id: traderId as string }})
@@ -181,39 +161,63 @@ export async function deleteTrader(traderId: String) {
 export async function addTraderTag(formData: FormData) {
     const traderId = formData.get('traderId') as string
     const newTag = formData.get('tag') as string
-  
     const trader = await db.trader.findUnique({ where: { id: traderId } })
     if (!trader || !newTag) return
-  
     const currentTags = trader.tags ? trader.tags.split(',') : []
-    
-    // Prevent duplicates
     if (!currentTags.includes(newTag)) {
         const updatedTags = [...currentTags, newTag].join(',')
-        await db.trader.update({
-            where: { id: traderId },
-            data: { tags: updatedTags }
-        })
+        await db.trader.update({ where: { id: traderId }, data: { tags: updatedTags } })
         revalidatePath(`/trader/${traderId}`)
         revalidatePath('/dashboard')
     }
-  }
+}
   
-  export async function removeTraderTag(formData: FormData) {
+export async function removeTraderTag(formData: FormData) {
     const traderId = formData.get('traderId') as string
     const tagToRemove = formData.get('tag') as string
+    const trader = await db.trader.findUnique({ where: { id: traderId } })
+    if (!trader) return
+    const currentTags = trader.tags ? trader.tags.split(',') : []
+    const updatedTags = currentTags.filter(t => t !== tagToRemove).join(',')
+    await db.trader.update({ where: { id: traderId }, data: { tags: updatedTags } })
+    revalidatePath(`/trader/${traderId}`)
+    revalidatePath('/dashboard')
+}
+
+// --- NEW: WALLET MANAGEMENT ---
+export async function addTraderAddress(formData: FormData) {
+    const traderId = formData.get('traderId') as string
+    const newAddress = (formData.get('address') as string).trim()
+    if (!newAddress) return
   
     const trader = await db.trader.findUnique({ where: { id: traderId } })
     if (!trader) return
   
-    const currentTags = trader.tags ? trader.tags.split(',') : []
-    const updatedTags = currentTags.filter(t => t !== tagToRemove).join(',')
+    const currentAddresses = trader.uxAddress ? trader.uxAddress.split(',') : []
+    // Prevent duplicates
+    if (!currentAddresses.includes(newAddress)) {
+        const updated = currentAddresses.filter(Boolean).concat(newAddress).join(',')
+        await db.trader.update({
+            where: { id: traderId },
+            data: { uxAddress: updated }
+        })
+        revalidatePath(`/trader/${traderId}`)
+    }
+}
+  
+export async function removeTraderAddress(formData: FormData) {
+    const traderId = formData.get('traderId') as string
+    const addressToRemove = formData.get('address') as string
+      
+    const trader = await db.trader.findUnique({ where: { id: traderId } })
+    if (!trader) return
+  
+    const currentAddresses = trader.uxAddress ? trader.uxAddress.split(',') : []
+    const updated = currentAddresses.filter(a => a !== addressToRemove).join(',')
   
     await db.trader.update({
         where: { id: traderId },
-        data: { tags: updatedTags }
+        data: { uxAddress: updated }
     })
-    
     revalidatePath(`/trader/${traderId}`)
-    revalidatePath('/dashboard')
-  }
+}

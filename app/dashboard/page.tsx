@@ -26,8 +26,33 @@ export default async function Dashboard() {
       <header className="max-w-7xl mx-auto flex justify-between items-center mb-16 border-b border-[#292524] pb-6">
         <div className="flex items-center gap-6">
            {/* Current User Badge */}
-           <div className="w-12 h-12 rounded-full overflow-hidden border border-[#44403c]">
-             <img src={currentUser?.profilePic} className="w-full h-full object-cover" />
+           <div className="relative w-12 h-12">
+             {(() => {
+               const pics = currentUser?.profilePic ? currentUser.profilePic.split(',') : []
+               if (pics.length > 1) {
+                 return (
+                   <>
+                     <img 
+                       src={pics[0]} 
+                       className="absolute top-0 left-0 w-8 h-8 rounded-full border border-[#44403c] z-0 object-cover" 
+                       alt="Profile 1"
+                     />
+                     <img 
+                       src={pics[1]} 
+                       className="absolute bottom-0 right-0 w-8 h-8 rounded-full border border-[#44403c] z-10 object-cover bg-[#0c0a09]" 
+                       alt="Profile 2"
+                     />
+                   </>
+                 )
+               }
+               return (
+                 <img 
+                   src={currentUser?.profilePic} 
+                   className="w-full h-full rounded-full border border-[#44403c] object-cover" 
+                   alt="Profile"
+                 />
+               )
+             })()}
            </div>
            
            <div className="flex flex-col justify-center">

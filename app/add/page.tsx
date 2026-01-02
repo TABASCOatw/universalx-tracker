@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { addTrader } from '../actions'
 import Link from 'next/link'
-import { ArrowLeft, X, Loader2, Handshake, Plus, Check } from 'lucide-react'
+import { ArrowLeft, X, Loader2, Handshake, Plus, Check, Trash2 } from 'lucide-react'
 import { useFormStatus } from 'react-dom'
 
 function SubmitButton() {
@@ -35,6 +35,9 @@ export default function AddTraderPage() {
   const [selectedTier, setSelectedTier] = useState('Tier 3')
   const [addDeal, setAddDeal] = useState(false)
   const [showExtraTiers, setShowExtraTiers] = useState(false)
+  
+  // MULTI-ADDRESS STATE
+  const [addresses, setAddresses] = useState<string[]>([''])
 
   const PREMADE_TAGS = ['Not trading', 'KOL', 'Active trader', 'Whale', 'Tester']
 
@@ -54,6 +57,21 @@ export default function AddTraderPage() {
         setCustomTagInput('')
       }
     }
+  }
+
+  // ADDRESS HANDLERS
+  const updateAddress = (idx: number, val: string) => {
+      const newArr = [...addresses]
+      newArr[idx] = val
+      setAddresses(newArr)
+  }
+
+  const addAddressField = () => setAddresses([...addresses, ''])
+  
+  const removeAddressField = (idx: number) => {
+      if (addresses.length > 1) {
+          setAddresses(addresses.filter((_, i) => i !== idx))
+      }
   }
 
   const tierOptions = [
@@ -82,6 +100,8 @@ export default function AddTraderPage() {
             
             <input type="hidden" name="tags" value={tags.join(',')} />
             <input type="hidden" name="tier" value={selectedTier} />
+            {/* HIDDEN INPUT FOR ADDRESSES */}
+            <input type="hidden" name="uxAddress" value={addresses.filter(a => a.trim()).join(',')} />
 
             {/* IDENTITY */}
             <div className="space-y-4">
@@ -136,10 +156,34 @@ export default function AddTraderPage() {
               </div>
             </div>
 
-            {/* CONFIG */}
+            {/* CONFIG (UPDATED FOR MULTIPLE ADDRESSES) */}
             <div className="space-y-4 pt-4 border-t border-[#292524]">
-               <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">UniversalX Config</label>
-               <input name="uxAddress" required placeholder="EVM or Solana Address" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
+               <div className="flex justify-between items-center">
+                   <label className="text-[10px] uppercase font-bold text-[#57534e] tracking-widest">UniversalX Config</label>
+                   <button type="button" onClick={addAddressField} className="text-[9px] text-amber-600 hover:text-amber-500 uppercase font-bold flex items-center gap-1">
+                      <Plus size={10} /> Add Wallet
+                   </button>
+               </div>
+               
+               <div className="space-y-2">
+                   {addresses.map((addr, idx) => (
+                       <div key={idx} className="flex items-center gap-2">
+                           <input 
+                             value={addr} 
+                             onChange={(e) => updateAddress(idx, e.target.value)}
+                             required={idx === 0} // Only first is required
+                             placeholder={`EVM or Solana Address ${idx + 1}`} 
+                             className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" 
+                           />
+                           {addresses.length > 1 && (
+                               <button type="button" onClick={() => removeAddressField(idx)} className="p-4 bg-[#1c1917] border border-[#292524] hover:border-red-800 hover:text-red-500 text-[#57534e] transition">
+                                   <Trash2 size={16} />
+                               </button>
+                           )}
+                       </div>
+                   ))}
+               </div>
+
                <input name="referralCode" placeholder="Referral Code (Optional)" className="w-full bg-[#0c0a09] border border-[#292524] p-4 text-[#e7e5e4] focus:border-amber-700 outline-none transition placeholder:text-[#292524] text-sm" />
             </div>
 

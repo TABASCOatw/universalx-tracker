@@ -19,16 +19,41 @@ export default async function LoginPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+        {/* EDITED: Changed from grid-cols-4 to flex with justify-center to keep them in one line */}
+        <div className="flex flex-wrap justify-center gap-8 max-w-6xl mx-auto">
           {users.map((user) => (
             <form key={user.id} action={login.bind(null, user.id)}>
               <button className="group flex flex-col items-center gap-4 transition-all hover:-translate-y-2">
                 <div className="relative">
-                  <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#292524] group-hover:border-amber-600 transition-colors shadow-2xl">
-                    <img src={user.profilePic} alt={user.username} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
-                  </div>
+                  
+                  {/* LOGIC: Handle Single vs Double Profile Pics */}
+                  {(() => {
+                    const pics = user.profilePic.split(',')
+                    if (pics.length > 1) {
+                      return (
+                        <div className="w-24 h-24 relative">
+                          <img 
+                            src={pics[0]} 
+                            className="absolute top-0 left-0 w-16 h-16 rounded-full border-2 border-[#292524] group-hover:border-amber-600 object-cover z-0 opacity-80 group-hover:opacity-100 transition-all" 
+                            alt=""
+                          />
+                          <img 
+                            src={pics[1]} 
+                            className="absolute bottom-0 right-0 w-16 h-16 rounded-full border-2 border-[#292524] group-hover:border-amber-600 object-cover z-10 bg-[#0c0a09] opacity-80 group-hover:opacity-100 transition-all" 
+                            alt=""
+                          />
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[#292524] group-hover:border-amber-600 transition-colors shadow-2xl">
+                        <img src={user.profilePic} alt={user.username} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    )
+                  })()}
+
                   {/* Glowing Ring Effect */}
-                  <div className="absolute -inset-2 rounded-full border border-amber-600/0 group-hover:border-amber-600/30 transition-all scale-90 group-hover:scale-100 duration-500"></div>
+                  <div className="absolute -inset-2 rounded-full border border-amber-600/0 group-hover:border-amber-600/30 transition-all scale-90 group-hover:scale-100 duration-500 pointer-events-none"></div>
                 </div>
                 <span className="text-[#a8a29e] group-hover:text-amber-500 font-medium tracking-wide uppercase text-sm transition-colors">
                   {user.username}

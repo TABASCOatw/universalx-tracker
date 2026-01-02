@@ -312,7 +312,31 @@ export function RosterView({ currentUser, teamMembers, allTraders }: any) {
           return (
             <div key={member.id} className="relative">
                <div className="flex items-center gap-4 mb-6">
-                  <img src={member.profilePic} className={`w-10 h-10 rounded-full border border-[#44403c] transition-all duration-500 ${isCurrentUser ? '' : 'grayscale opacity-60'}`} />
+                  {/* Handle Single vs Double Profile Pic */}
+                  {(() => {
+                    const profilePics = member.profilePic.split(',')
+                    return profilePics.length > 1 ? (
+                      <div className={`relative w-10 h-10 flex-shrink-0 ${isCurrentUser ? '' : 'grayscale opacity-60 transition-all duration-500'}`}>
+                        <img 
+                          src={profilePics[0]} 
+                          className="absolute top-0 left-0 w-7 h-7 rounded-full border border-[#44403c] z-0 object-cover" 
+                          alt=""
+                        />
+                        <img 
+                          src={profilePics[1]} 
+                          className="absolute bottom-0 right-0 w-7 h-7 rounded-full border border-[#44403c] z-10 object-cover bg-[#1c1917]" 
+                          alt=""
+                        />
+                      </div>
+                    ) : (
+                      <img 
+                        src={member.profilePic} 
+                        className={`w-10 h-10 rounded-full border border-[#44403c] object-cover transition-all duration-500 ${isCurrentUser ? '' : 'grayscale opacity-60'}`} 
+                        alt={member.username}
+                      />
+                    )
+                  })()}
+
                   <div>
                     <h2 className={`font-bold uppercase tracking-widest text-lg flex items-center gap-3 ${isCurrentUser ? 'text-[#e7e5e4]' : 'text-[#78716c]'}`}>
                         {member.username}

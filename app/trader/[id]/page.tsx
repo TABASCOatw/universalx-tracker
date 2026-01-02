@@ -13,7 +13,8 @@ import { TagManager } from './TagManager'
 import { RecentTrades } from './RecentTrades'
 import { ReferralStats } from './ReferralStats'
 import { DealSection } from './DealSection'
-import { AssetHoldings } from './AssetHoldings' // NEW IMPORT
+import { AssetHoldings } from './AssetHoldings' 
+import { WalletManager } from './WalletManager' // NEW IMPORT
 
 export default async function TraderPage({ params }: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies()
@@ -47,6 +48,9 @@ export default async function TraderPage({ params }: { params: Promise<{ id: str
   const flagCode = codeMap[trader.region] || 'un'
   
   const tags = trader.tags ? trader.tags.split(',').filter(Boolean) : []
+  
+  // Split addresses for display
+  const addresses = trader.uxAddress ? trader.uxAddress.split(',').filter(Boolean) : []
 
   return (
     <main className="min-h-screen bg-[#0c0a09] text-[#e7e5e4] p-8 font-sans flex justify-center">
@@ -85,6 +89,13 @@ export default async function TraderPage({ params }: { params: Promise<{ id: str
                  <a href={trader.xAccountLink} target="_blank" className="text-amber-600 hover:text-amber-500 flex items-center justify-center lg:justify-start gap-2 text-sm font-mono mb-6 transition-colors">
                     {trader.xHandle} <ExternalLink size={12} />
                  </a>
+
+                 {/* WALLET ADDRESS MANAGER (UPDATED) */}
+                 <WalletManager 
+                    traderId={trader.id} 
+                    addresses={addresses} 
+                    isOwner={isOwner} 
+                 />
 
                  {/* Interactive Tag Manager */}
                  <TagManager traderId={trader.id} initialTags={tags} />
